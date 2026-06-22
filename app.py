@@ -54,6 +54,14 @@ def webhook():
     phone = data.get("phone") 
     user_message = data.get("message", "")
     msg_type = data.get("type", "text") 
+
+    # --- إضافة شرط الحماية من المجموعات ---
+    # نتحقق إذا كان حقل 'isGroup' موجوداً في البيانات وتأكدنا أنه 'true'
+    is_group = data.get("isGroup", False) 
+    if is_group:
+        # هنا البوت سيتجاهل الرسالة تماماً ولن يرد
+        return jsonify({"status": "ignored", "reason": "group message"}), 200
+    # --------------------------------------
     
     # التعامل مع الرسائل الصوتية
     if msg_type == 'audio':
