@@ -35,20 +35,28 @@ async function getAIResponse(userMessage, customer) {
 
 // تشغيل البوت
 async function startBot() {
+    console.log("جاري محاولة الاتصال بالواتساب..."); // سطر تصحيحي
     const { state, saveCreds } = await useMultiFileAuthState('jolnar_session_v1');
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
+        browser: ['Jolnar Bot', 'Chrome', '1.0.0'], // إضافة متصفح لضمان الاستقرار
     });
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
-        if (qr) qrcode.generate(qr, { small: true });
         
+        // إذا كان هناك رمز QR، سيطبعه فوراً
+        if (qr) {
+            console.log("يجب أن يظهر الـ QR Code الآن:");
+            qrcode.generate(qr, { small: true });
+        }
+
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log("الاتصال مغلق، إعادة المحاولة...", shouldReconnect);
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
             console.log('جلنار متصلة بالواتساب بنجاح!');
