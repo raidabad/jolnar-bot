@@ -1,10 +1,8 @@
 require('dotenv').config();
-const express = require('express');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
-
-const app = express();
-app.use(express.json());
+const pino = require('pino');
 
 // إعداد الاتصال
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -12,7 +10,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // جلب بيانات العميل
 async function getCustomerInfo(phone) {
-    const { data, error } = await supabase.from("customers").select("customer_name, customer_type").eq("phone_number", phone);
+    const { data } = await supabase.from("customers").select("customer_name, customer_type").eq("phone_number", phone);
     return data && data.length > 0 ? data[0] : null;
 }
 
@@ -46,28 +44,45 @@ async function getAIResponse(userMessage, customer) {
     return result.response.text();
 }
 
-// الـ Webhook
-app.post('/webhook', async (req, res) => {
-    const { phone, message, type, isGroup } = req.body;
+// اتصال واتساب
+async function startBot() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const sock = makeWASocket({
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: true,
+        auth: state,
+    });
 
-    // حماية المجموعات
-    if (isGroup) {
-        return res.status(200).json({ status: "ignored", reason: "group message" });
-    }
+    sock.ev.on('creds.update', saveCreds);
 
-    // التعامل مع الصوت
-    if (type === 'audio') {
-        return res.json({ reply: "يا غالية، نورتينا. يفضل أن ترسلي استفسارك نصياً عشان أقدر أخدمكِ بدقة وبأسرع وقت بخصوص منتجاتنا وأسعارنا. بانتظار رسالتك!" });
-    }
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) startBot();
+        } else if (connection === 'open') {
+            console.log('جلنار متصلة بالواتساب بنجاح!');
+        }
+    });
 
-    // المعالجة
-    const customer = await getCustomerInfo(phone);
-    const reply = await getAIResponse(message || "", customer);
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+        const msg = messages[0];
+        if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) return; // حماية المجموعات
 
-    res.json({ reply: reply });
-});
+        const phone = msg.key.remoteJid.replace('@s.whatsapp.net', '');
+        const message = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+        
+        // التعامل مع الصوت
+        if (msg.message?.audioMessage || msg.message?.voiceMessage) {
+            await sock.sendMessage(msg.key.remoteJid, { text: "يا غالية، نورتينا. يفضل أن ترسلي استفسارك نصياً عشان أقدر أخدمكِ بدقة. بانتظار رسالتك!" });
+            return;
+        }
 
-app.get('/', (req, res) => res.send("بوت جلنار يعمل بنجاح!"));
+        const customer = await getCustomerInfo(phone);
+        const reply = await getAIResponse(message, customer);
+        await sock.sendMessage(msg.key.remoteJid, { text: reply });
+    });
+}
 
-const port = process.env.PORT || 10000;
-app.listen(port, () => console.log(`Server running on port ${port}`));
+startBot();
