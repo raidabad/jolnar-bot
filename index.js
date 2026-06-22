@@ -3,6 +3,37 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const pino = require('pino');
+const qrcode = require('qrcode-terminal'); // أضف هذا السطر في أعلى الملف
+
+async function startBot() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const sock = makeWASocket({
+        logger: pino({ level: 'silent' }),
+        auth: state,
+        // إزالة printQRInTerminal: true
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        
+        // هنا نقوم بعرض الـ QR يدوياً إذا وجد
+        if (qr) {
+            qrcode.generate(qr, { small: true });
+            console.log('QR Code تم توليده، قم بمسحه من هاتفك!');
+        }
+
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) startBot();
+        } else if (connection === 'open') {
+            console.log('جلنار متصلة بالواتساب بنجاح!');
+        }
+    });
+
+    // ... باقي الكود كما هو (messages.upsert)
+}
 
 // إعداد الاتصال
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
