@@ -35,7 +35,7 @@ async function getAIResponse(userMessage, customer) {
 
 // تشغيل البوت
 async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const { state, saveCreds } = await useMultiFileAuthState('jolnar_session_v1');
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
