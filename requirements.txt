@@ -1,5 +1,0 @@
-flask
-gunicorn
-google-generativeai
-supabase
-python-dotenv
