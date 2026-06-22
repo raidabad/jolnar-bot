@@ -5,13 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal'); // أضف هذا السطر في أعلى الملف
 
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
-    const sock = makeWASocket({
-        logger: pino({ level: 'silent' }),
-        auth: state,
-        // إزالة printQRInTerminal: true
-    });
+
 
     sock.ev.on('creds.update', saveCreds);
 
