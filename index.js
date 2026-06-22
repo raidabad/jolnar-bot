@@ -35,12 +35,14 @@ async function getAIResponse(userMessage, customer) {
 
 // تشغيل البوت
 async function startBot() {
-    console.log("جاري محاولة الاتصال بالواتساب..."); // سطر تصحيحي
-    const { state, saveCreds } = await useMultiFileAuthState('jolnar_session_v1');
+    console.log("جاري محاولة الاتصال بالواتساب...");
+    const { state, saveCreds } = await useMultiFileAuthState('jolnar_session');
+    
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        browser: ['Jolnar Bot', 'Chrome', '1.0.0'], // إضافة متصفح لضمان الاستقرار
+        browser: ['Jolnar', 'Chrome', '1.0.0'],
+        connectTimeoutMs: 60000, // زيادة وقت الانتظار
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -48,16 +50,20 @@ async function startBot() {
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
-        // إذا كان هناك رمز QR، سيطبعه فوراً
         if (qr) {
-            console.log("يجب أن يظهر الـ QR Code الآن:");
+            console.log("=== QR CODE START ===");
             qrcode.generate(qr, { small: true });
+            console.log("=== QR CODE END ===");
         }
 
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log("الاتصال مغلق، إعادة المحاولة...", shouldReconnect);
-            if (shouldReconnect) startBot();
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            console.log("الاتصال مغلق، السبب:", statusCode);
+            
+            // لا تعد الاتصال إذا كان الخطأ هو تسجيل خروج
+            if (statusCode !== DisconnectReason.loggedOut) {
+                setTimeout(startBot, 5000); // تأخير 5 ثوانٍ قبل إعادة المحاولة لتقليل ضغط الذاكرة
+            }
         } else if (connection === 'open') {
             console.log('جلنار متصلة بالواتساب بنجاح!');
         }
