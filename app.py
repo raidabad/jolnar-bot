@@ -3,6 +3,8 @@ import json
 from flask import Flask, request, jsonify
 import google.generativeai as genai
 from supabase import create_client
+from dotenv import load_dotenv
+load_dotenv() # هذا السطر يقرأ الملف .env محلياً
 
 app = Flask(__name__)
 
