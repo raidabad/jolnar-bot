@@ -4,10 +4,13 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
+const express = require('express');
 
+// إعداد الاتصال
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// جلب بيانات العميل والمنتجات
 async function getCustomerInfo(phone) {
     const { data } = await supabase.from("customers").select("customer_name, customer_type").eq("phone_number", phone);
     return data && data.length > 0 ? data[0] : null;
@@ -18,6 +21,7 @@ async function getProductsFromDB() {
     return data || [];
 }
 
+// الرد الذكي
 async function getAIResponse(userMessage, customer) {
     const products = await getProductsFromDB();
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -25,11 +29,11 @@ async function getAIResponse(userMessage, customer) {
     const cType = customer ? customer.customer_type : "عزيزتنا";
 
     const systemInstruction = `أنتِ مستشارة مبيعات خبيرة في متجر 'جلنار'. الاسم ${name}، النوع ${cType}. الأسلوب الصنعاني مطلوب. استخدمي قائمة الأسعار هذه: ${JSON.stringify(products)}.`;
-
     const result = await model.generateContent(systemInstruction + "\nرسالة العميل: " + userMessage);
     return result.response.text();
 }
 
+// تشغيل البوت
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const sock = makeWASocket({
@@ -60,7 +64,7 @@ async function startBot() {
         const message = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
         
         if (msg.message?.audioMessage || msg.message?.voiceMessage) {
-            await sock.sendMessage(msg.key.remoteJid, { text: "يا غالية، نورتينا. يفضل أن ترسلي استفسارك نصياً عشان أقدر أخدمكِ بدقة." });
+            await sock.sendMessage(msg.key.remoteJid, { text: "يا غالية، نورتينا. يرجى إرسال استفسارك نصياً لخدمتك بشكل أفضل." });
             return;
         }
 
@@ -70,4 +74,11 @@ async function startBot() {
     });
 }
 
-startBot();
+// فتح منفذ للخادم (لإرضاء Render)
+const app = express();
+const PORT = process.env.PORT || 10000;
+app.get('/', (req, res) => res.send('جلنار تعمل بنجاح!'));
+app.listen(PORT, () => {
+    console.log(`الخادم يعمل على المنفذ ${PORT}`);
+    startBot();
+});
